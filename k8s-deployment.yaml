@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-anomaly-detector
+  labels:
+    app: k8s-anomaly-detector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: k8s-anomaly-detector
+  template:
+    metadata:
+      labels:
+        app: k8s-anomaly-detector
+    spec:
+      containers:
+        - name: anomaly-detector
+          image: python:3.11-slim
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c"]
+          args:
+            - mkdir -p /workspace &&
+              tar xzf /config/code.tar.gz -C /workspace &&
+              cd /workspace &&
+              pip install --no-cache-dir -r requirements.txt &&
+              uvicorn app.api.main:app --host 0.0.0.0 --port 8000
+          env:
+            - name: PROMETHEUS_URL
+              value: "http://prometheus:9090"
+            - name: NAMESPACE_REGEX
+              value: ".*"
+          ports:
+            - name: http
+              containerPort: 8000
+          volumeMounts:
+            - name: code
+              mountPath: /config
+      volumes:
+        - name: code
+          configMap:
+            name: anomaly-detector-code
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: k8s-anomaly-detector
+  labels:
+    app: k8s-anomaly-detector
+spec:
+  selector:
+    app: k8s-anomaly-detector
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP
